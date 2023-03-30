@@ -96,11 +96,13 @@ def average_LR_RMSE(X, y, lambdas, n_folds):
     kf = KFold(n_folds)
     
     # Fill in all entries in the matrix 'RMSE_mat'
+    # Define Matrix indices
     mat_i = 0
     mat_j = 0
     
     for lam in lambdas:
         for train_index, test_index in kf.split(X):
+
             X_train = X[train_index]
             y_train = y[train_index]
             
@@ -128,7 +130,7 @@ def average_LR_RMSE(X, y, lambdas, n_folds):
 # Main function. You don't have to change this
 if __name__ == "__main__":
     # Data loading
-    data = pd.read_csv("/home/otps3141/Documents/Dokumente/ETH QE/Semester 2/Intro ML/Projects/P1/a)/task1a_do4bq81me/train.csv")
+    data = pd.read_csv("train.csv")
     y = data["y"].to_numpy()
     data = data.drop(columns="y")
     # print a few data samples
@@ -146,4 +148,4 @@ if __name__ == "__main__":
     # print(fit(X, y, 0))
 
     # Save results in the required format
-    np.savetxt("Projects/Own solutions/P1/a)/sample.csv", avg_RMSE, fmt="%.12f")
+    np.savetxt("sample.csv", avg_RMSE, fmt="%.12f")

@@ -62,7 +62,7 @@ def fit(X, y):
 # Main function. You don't have to change this
 if __name__ == "__main__":
     # Data loading
-    data = pd.read_csv("/home/otps3141/Documents/Dokumente/ETH QE/Semester 2/Intro ML/Projects/P1/b)/task1b_ql4jfi6af0/train.csv")
+    data = pd.read_csv("train.csv")
     y = data["y"].to_numpy()
     data = data.drop(columns=["Id", "y"])
     # print a few data samples
@@ -74,4 +74,4 @@ if __name__ == "__main__":
     w = fit(X, y)
     print(w)
     # Save results in the required format
-    np.savetxt("Projects/Own solutions/P1/b)/sample.csv", w, fmt="%.12f")
+    np.savetxt("sample.csv", w, fmt="%.12f")
