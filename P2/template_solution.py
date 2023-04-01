@@ -5,11 +5,16 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.gaussian_process import GaussianProcessRegressor
-from sklearn.gaussian_process.kernels import DotProduct, RBF, Matern, RationalQuadratic
+from sklearn.gaussian_process.kernels import DotProduct, RBF, Matern, RationalQuadratic, ExpSineSquared
 from sklearn.kernel_approximation import PolynomialCountSketch
 from sklearn.linear_model import SGDClassifier
 from sklearn.model_selection import KFold
 from sklearn.metrics import mean_squared_error
+from sklearn.metrics import r2_score
+from sklearn.experimental import enable_iterative_imputer
+from sklearn.impute import IterativeImputer
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
 
 
 def data_loading():
@@ -26,38 +31,63 @@ def data_loading():
     X_test: matrix of floats: dim = (100, ?), test input with features
     """
     # Load training data
-    train_df = pd.read_csv("train.csv")
+    train_df = pd.read_csv("P2/train.csv")
 
-    print("Training data:")
-    print("Shape:", train_df.shape)
-    print(train_df.head(2))
-    print('\n')
+    # print("Training data:")
+    # print("Shape:", train_df.shape)
+    # print(train_df.head(2))
+    # print('\n')
 
     # Load test data
-    test_df = pd.read_csv("test.csv")
+    test_df = pd.read_csv("P2/test.csv")
 
-    print("Test data:")
-    print(test_df.shape)
-    print(test_df.head(2))
+    # print("Test data:")
+    # print(test_df.shape)
+    # print(test_df.head(2))
 
-    # Dummy initialization of the X_train, X_test and y_train
-    X_train = np.zeros_like(train_df.drop(['price_CHF'], axis=1))
-    y_train = np.zeros_like(train_df['price_CHF'])
-    X_test = np.zeros_like(test_df)
+    # # Dummy initialization of the X_train, X_test and y_train
+    # X_train = np.zeros_like(train_df.drop(['price_CHF'], axis=1))
+    # y_train = np.zeros_like(train_df['price_CHF'])
+    # X_test = np.zeros_like(test_df)
 
     # print(train_df)
 
     # Perform data preprocessing, imputation and extract X_train, y_train and X_test using mean values
-    new_df = train_df.fillna(train_df.mean())
-    y_train = new_df["price_CHF"].to_numpy()
-    X_train = new_df.drop(columns=["price_CHF"]).to_numpy()
 
-    new_test_df = test_df.fillna(test_df.mean())
+    # Use interpolation for missing values. Interpolate cannot handle missing starting or end values. So fill these up with mean()
+
+    new_train_df = train_df.interpolate(method="akima")
+    new_train_df = new_train_df.fillna(train_df.mean())
+    y_train = new_train_df["price_CHF"].to_numpy()
+    X_train = new_train_df.drop(columns=["price_CHF"]).to_numpy()
+
+
+    new_test_df = test_df.interpolate(method="akima")
+    new_test_df = new_test_df.fillna(new_test_df.mean())
     X_test = new_test_df.to_numpy()
+
+    # Use sklearn imputation
+
+    # new_df = train_df.fillna(train_df.mean())
+    # y_train = new_df["price_CHF"].to_numpy()
+    # X_train = new_df.drop(columns=["price_CHF"]).to_numpy()
+
+    # new_test_df = test_df.fillna(test_df.mean())
+    # X_test = new_test_df.to_numpy()
+
+
 
     assert (X_train.shape[1] == X_test.shape[1]) and (X_train.shape[0] == y_train.shape[0]) and (
                 X_test.shape[0] == 100), "Invalid data shape"
     return X_train, y_train, X_test
+
+
+def calculate_R2(y_pred, y):
+
+    R2 = r2_score(y, y_pred)
+
+    assert np.isscalar(R2)
+    return R2
 
 
 def calculate_RMSE(y_pred, y):
@@ -114,8 +144,9 @@ def modeling_and_prediction(X_train, y_train, X_test):
 
     # Storage array for RMSE values
     RMSE_mat = np.zeros(9)
+    R2_mat = np.zeros(9)
 
-    # Deine n_fold cross validation
+    # Define n_fold cross validation
     kf = KFold(9)
     mat_i = 0
 
@@ -127,7 +158,7 @@ def modeling_and_prediction(X_train, y_train, X_test):
         X_train_folds = X_train[train_index]
         y_train_folds = y_train[train_index]
 
-        gpr = GaussianProcessRegressor(kernel=RBF())
+        gpr = GaussianProcessRegressor(kernel=RationalQuadratic())
         gpr.fit(X_train_folds, y_train_folds)
 
         X_test = X_train[test_index]
@@ -140,17 +171,23 @@ def modeling_and_prediction(X_train, y_train, X_test):
         models.append(gpr)
 
         RMSE_mat[mat_i] = calculate_RMSE(y_pred, y_test)
+        R2_mat[mat_i] = calculate_R2(y_pred, y_test)
 
         mat_i = mat_i + 1
 
     print(RMSE_mat)
+    print(R2_mat)
 
     # Determine best model
-    best_index = np.argmin(RMSE_mat)
+    best_index_RMSE = np.argmin(RMSE_mat)
+    best_index_R2 = np.argmin(R2_mat)
 
-    final_gpr = models[best_index]
+    final_gpr_RMSE = models[best_index_RMSE]
+    final_gpr_R2 = models[best_index_R2]
 
-    y_pred = final_gpr.predict(X_test1[:, 1:])
+    # y_pred = final_gpr_RMSE.predict(X_test1[:, 1:])
+    y_pred = final_gpr_R2.predict(X_test1[:, 1:])
+
 
     # print(gpr.score(X_train[:,1:], y_train))
 
@@ -174,6 +211,8 @@ if __name__ == "__main__":
     # Save results in the required format
 
     dt = pd.DataFrame(y_pred)
+
     dt.columns = ['price_CHF']
-    dt.to_csv('results.csv', index=False)
+    print(dt.head(5))
+    dt.to_csv('P2/results.csv', index=False)
     print("\nResults file successfully generated!")
