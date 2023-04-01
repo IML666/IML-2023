@@ -56,6 +56,8 @@ def data_loading():
 
     # Use interpolation for missing values. Interpolate cannot handle missing starting or end values. So fill these up with mean()
 
+    # Why does this not work with RBF?
+    
     new_train_df = train_df.interpolate(method="akima")
     new_train_df = new_train_df.fillna(train_df.mean())
     y_train = new_train_df["price_CHF"].to_numpy()
