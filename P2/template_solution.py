@@ -57,15 +57,29 @@ def data_loading():
     # Use interpolation for missing values. Interpolate cannot handle missing starting or end values. So fill these up with mean()
 
     # Why does this not work with RBF?
-    
+
+    ### Training set
+
     new_train_df = train_df.interpolate(method="akima")
     new_train_df = new_train_df.fillna(train_df.mean())
+
+    # Encode season data
+
+    binary_version_seasons = pd.get_dummies(new_train_df['season'])
+    new_train_df = new_train_df.drop(columns=['season']).join(binary_version_seasons)
+
     y_train = new_train_df["price_CHF"].to_numpy()
     X_train = new_train_df.drop(columns=["price_CHF"]).to_numpy()
 
+    ### Test set
 
     new_test_df = test_df.interpolate(method="akima")
     new_test_df = new_test_df.fillna(new_test_df.mean())
+
+    # Encode season data
+
+    new_test_df = new_test_df.drop(columns=['season']).join(binary_version_seasons)
+
     X_test = new_test_df.to_numpy()
 
     # Use sklearn imputation
@@ -76,6 +90,9 @@ def data_loading():
 
     # new_test_df = test_df.fillna(test_df.mean())
     # X_test = new_test_df.to_numpy()
+
+    print(new_train_df.head())
+    print(new_test_df.head())
 
 
 
@@ -132,7 +149,7 @@ def modeling_and_prediction(X_train, y_train, X_test):
     y_pred1 = np.zeros(X_test.shape[0])
 
     # Leave out seasons data
-    X_train = X_train[:, 1:]
+    # X_train = X_train[:, 1:]
 
     # Define final test data
     X_test1 = X_test
@@ -160,7 +177,7 @@ def modeling_and_prediction(X_train, y_train, X_test):
         X_train_folds = X_train[train_index]
         y_train_folds = y_train[train_index]
 
-        gpr = GaussianProcessRegressor(kernel=RationalQuadratic())
+        gpr = GaussianProcessRegressor(kernel=DotProduct())
         gpr.fit(X_train_folds, y_train_folds)
 
         X_test = X_train[test_index]
@@ -188,7 +205,7 @@ def modeling_and_prediction(X_train, y_train, X_test):
     final_gpr_R2 = models[best_index_R2]
 
     # y_pred = final_gpr_RMSE.predict(X_test1[:, 1:])
-    y_pred = final_gpr_R2.predict(X_test1[:, 1:])
+    y_pred = final_gpr_R2.predict(X_test1[:, :])
 
 
     # print(gpr.score(X_train[:,1:], y_train))
