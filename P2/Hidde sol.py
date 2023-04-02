@@ -12,6 +12,8 @@ from functools import partial
 from sklearn.gaussian_process import GaussianProcessRegressor
 import scipy.optimize
 
+# Hidde wrote this
+
 class MyGPR(GaussianProcessRegressor):
     def __init__(self, *args, max_iter=15000, **kwargs):
         super().__init__(*args, **kwargs)
