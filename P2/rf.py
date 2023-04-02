@@ -76,7 +76,6 @@ def modeling_and_prediction(X_train, y_train, X_test):
     """
 
     y_pred=np.zeros(X_test.shape[0])
-    #TODO: Define the model and fit it using training data. Then, use test data to make predictions
 
     # Define model
     model = RandomForestRegressor(n_estimators=200)
