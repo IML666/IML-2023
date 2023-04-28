@@ -6,10 +6,13 @@ from torchvision import transforms
 from torch.utils.data import DataLoader, TensorDataset
 import os
 import torch
+import torchvision
+import torchvision.models as models
 from torchvision import transforms
 import torchvision.datasets as datasets
 import torch.nn as nn
 import torch.nn.functional as F
+import matplotlib.pyplot as plt
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -19,7 +22,12 @@ def generate_embeddings():
     the embeddings.
     """
     # TODO: define a transform to pre-process the images
-    train_transforms = transforms.Compose([transforms.ToTensor()])
+    train_transforms = transforms.Compose([
+    torchvision.transforms.Resize(256),
+    torchvision.transforms.CenterCrop(224),
+    torchvision.transforms.ToTensor(),
+    torchvision.transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+])
 
     train_dataset = datasets.ImageFolder(root="P3/dataset/", transform=train_transforms)
     # Hint: adjust batch_size and num_workers to your PC configuration, so that you don't 
@@ -27,18 +35,47 @@ def generate_embeddings():
     train_loader = DataLoader(dataset=train_dataset,
                               batch_size=64,
                               shuffle=False,
-                              pin_memory=True, num_workers=16)
+                              pin_memory=True, num_workers=8)
 
     # TODO: define a model for extraction of the embeddings (Hint: load a pretrained model,
     #  more info here: https://pytorch.org/vision/stable/models.html)
-    model = nn.Module()
+
+    # model = nn.Module()
+
+    ### Use ResNet18 as pretrained model
+    # model = torch.hub.load('pytorch/vision:v0.10.0', 'resnet18', pretrained=True)
+    model = models.resnet18(pretrained=True)
+
+    # Use the model in evaluation mode to get the calculated features
+    model.eval()
+
+    # To get the features use the last layer before classification
+    layer = model._modules.get('avgpool')
+
+
+    
+
     embeddings = []
-    embedding_size = 1000 # Dummy variable, replace with the actual embedding size once you 
-    # pick your model
+    embedding_size = 512 # Choose 512 for ResNet18 layer avgpool
     num_images = len(train_dataset)
     embeddings = np.zeros((num_images, embedding_size))
     # TODO: Use the model to extract the embeddings. Hint: remove the last layers of the 
-    # model to access the embeddings the model generates. 
+    # model to access the embeddings the model generates.
+
+    # Get the features from this last layer
+    def get_feature_data(m, i, o):
+        embeddings.copy_(o.flatten())  
+
+    features = layer.register_forward_hook(get_feature_data)
+
+    with torch.no_grad():                              
+        model(train_dataset)
+
+    features.remove()
+
+    ### Use last layer before classification part
+
+
 
     np.save('P3/dataset/embeddings.npy', embeddings)
 
@@ -183,7 +220,7 @@ if __name__ == '__main__':
     TEST_TRIPLETS = 'P3/test_triplets.txt'
 
     # generate embedding for each image in the dataset
-    if(os.path.exists('P3/dataset/embeddings.npy') == False):
+    if(os.path.exists('P3/dataset/embeddings.npy') == True):
         generate_embeddings()
 
     # load the training and testing data
