@@ -11,7 +11,6 @@ import torchvision.datasets as datasets
 import torch.nn as nn
 import torch.nn.functional as F
 
-
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 def generate_embeddings():
@@ -22,7 +21,7 @@ def generate_embeddings():
     # TODO: define a transform to pre-process the images
     train_transforms = transforms.Compose([transforms.ToTensor()])
 
-    train_dataset = datasets.ImageFolder(root="dataset/", transform=train_transforms)
+    train_dataset = datasets.ImageFolder(root="P3/dataset/", transform=train_transforms)
     # Hint: adjust batch_size and num_workers to your PC configuration, so that you don't 
     # run out of memory
     train_loader = DataLoader(dataset=train_dataset,
@@ -41,7 +40,7 @@ def generate_embeddings():
     # TODO: Use the model to extract the embeddings. Hint: remove the last layers of the 
     # model to access the embeddings the model generates. 
 
-    np.save('dataset/embeddings.npy', embeddings)
+    np.save('P3/dataset/embeddings.npy', embeddings)
 
 
 def get_data(file, train=True):
@@ -60,10 +59,10 @@ def get_data(file, train=True):
             triplets.append(line)
 
     # generate training data from triplets
-    train_dataset = datasets.ImageFolder(root="dataset/",
+    train_dataset = datasets.ImageFolder(root="P3/dataset/",
                                          transform=None)
     filenames = [s[0].split('/')[-1].replace('.jpg', '') for s in train_dataset.samples]
-    embeddings = np.load('dataset/embeddings.npy')
+    embeddings = np.load('P3/dataset/embeddings.npy')
     # TODO: Normalize the embeddings across the dataset
 
     file_to_embedding = {}
@@ -180,11 +179,11 @@ def test_model(model, loader):
 
 # Main function. You don't have to change this
 if __name__ == '__main__':
-    TRAIN_TRIPLETS = 'train_triplets.txt'
-    TEST_TRIPLETS = 'test_triplets.txt'
+    TRAIN_TRIPLETS = 'P3/train_triplets.txt'
+    TEST_TRIPLETS = 'P3/test_triplets.txt'
 
     # generate embedding for each image in the dataset
-    if(os.path.exists('dataset/embeddings.npy') == False):
+    if(os.path.exists('P3/dataset/embeddings.npy') == False):
         generate_embeddings()
 
     # load the training and testing data
