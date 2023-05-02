@@ -137,8 +137,15 @@ def get_data(file, train=True):
 
     X = np.vstack(X)
     y = np.hstack(y)
+
+    if train:
+        np.save('P3/dataset/X.npy', X)
+        np.save('P3/dataset/y.npy', y)
+    else:
+        np.save('P3/dataset/X_test.npy', X)
+    
     print("return")
-    return X, y
+    # return X, y
 
 # Hint: adjust batch_size and num_workers to your PC configuration, so that you don't run out of memory
 def create_loader_from_np(X, y = None, train = True, batch_size=64, shuffle=True, num_workers = 4):
@@ -160,6 +167,7 @@ def create_loader_from_np(X, y = None, train = True, batch_size=64, shuffle=True
                         batch_size=batch_size,
                         shuffle=shuffle,
                         pin_memory=True, num_workers=num_workers)
+    print("finish load")
     return loader
 
 # TODO: define a model. Here, the basic structure is defined, but you need to fill in the details
@@ -172,7 +180,7 @@ class Net(nn.Module):
         The constructor of the model.
         """
         super().__init__()
-        self.fc = nn.Linear(3000, 1)
+        self.fc = nn.Linear(6144, 2)
 
     def forward(self, x):
         """
@@ -258,16 +266,28 @@ if __name__ == '__main__':
     if(os.path.exists('P3/dataset/embeddings_otto.npy') == False):
         generate_embeddings()
 
-    # load the training and testing data
-    X, y = get_data(TRAIN_TRIPLETS)
+    # load the training
+    # X, y = get_data(TRAIN_TRIPLETS)
+    get_data(TRAIN_TRIPLETS)
 
-    X_test, _ = get_data(TEST_TRIPLETS, train=False)
-    # Create data loaders for the training and testing data
+    X = np.load('P3/dataset/X.npy')
+    y = np.load('P3/dataset/y.npy')
+
     train_loader = create_loader_from_np(X, y, train = True, batch_size=64)
-    test_loader = create_loader_from_np(X_test, train = False, batch_size=2048, shuffle=False)
 
-    # define a model and train it
+
+    # # define a model and train it
     model = train_model(train_loader)
+
+    # load testing data
+    # X_test, _ = get_data(TEST_TRIPLETS, train=False)
+    get_data(TEST_TRIPLETS, train=False)
+
+    X_test = np.load('P3/dataset/X_test.npy')
+
+    test_loader = create_loader_from_np(X_test, train = False, batch_size=2048, shuffle=False)
+   
+   
     
     # # test the model on the test data
     # test_model(model, test_loader)
