@@ -15,6 +15,8 @@ import torch.nn.functional as F
 import matplotlib.pyplot as plt
 from sklearn import preprocessing as pre
 from torchvision.models import resnet50, ResNet50_Weights
+### Use progress bar
+from tqdm import tqdm
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -54,37 +56,42 @@ def generate_embeddings():
     # Use the model in evaluation mode to get the calculated features
     model.eval()
 
-    # To get the features use the last layer before classification
-    layer = model._modules.get('avgpool')
-
-
-    
+      
 
     embeddings = []
-    embedding_size = 512 # Choose 512 for ResNet18 layer avgpool
+    embedding_size = list(model.children())[-1].in_features # Get in_features via debugger
     num_images = len(train_dataset)
     embeddings = np.zeros((num_images, embedding_size))
-    # Maybe use torch.zeros(512) instead
 
     # TODO: Use the model to extract the embeddings. Hint: remove the last layers of the 
     # model to access the embeddings the model generates.
 
-    # Get the features from this last layer
-    # def get_feature_data(m, i, o):
-    #     embeddings.copy_(o.flatten())  
+    ### Define last layer or specific one
 
-    features = layer.register_forward_hook(get_feature_data)
-
-    # with torch.no_grad():                              
-    #     model(train_loader)
-
-    features.remove()
-
-    ### Use last layer before classification part
+    model = nn.Sequential(*list(model.children())[:-1])     # Takes resnet model and cuts the evaluation stage
 
 
+    with torch.no_grad():  
 
-    np.save('P3/dataset/embeddings.npy', embeddings)
+        # Note that len(train_loader) = 157 which corresponds to 10048 = 157*64  
+
+        for batch_index, (image, image_index) in enumerate(tqdm(train_loader)):  
+
+            # Create embeddings i.e. the features after avgpool layer
+
+            extracted_features = model(image)
+
+            # Observe that extracted_features.shape = torch.Size([64, 2048, 1, 1]). However, we need extracted_features.squeeze().shape = torch.Size([64, 2048])
+
+            extracted_features = extracted_features.squeeze().cpu().numpy()
+
+            # Since we have chosen batch_size = 64 fill embeddings in this way
+
+            embeddings[batch_index * train_loader.batch_size : (batch_index + 1) * train_loader.batch_size] = extracted_features
+
+
+
+    np.save('P3/dataset/embeddings_otto.npy', embeddings)
 
 
 def get_data(file, train=True):
@@ -106,15 +113,11 @@ def get_data(file, train=True):
     train_dataset = datasets.ImageFolder(root="P3/dataset/",
                                          transform=None)
     filenames = [s[0].split('/')[-1].replace('.jpg', '') for s in train_dataset.samples]
-    embeddings = np.load('P3/dataset/embeddings.npy')
+    embeddings = np.load('P3/dataset/embeddings_otto.npy')
     # TODO: Normalize the embeddings across the dataset
-    num_images = len(train_dataset)
-
-    for i in num_images:
-
-        embeddings[i] = embeddings[i].reshape(-1,1)
-
-        embeddings[i] = pre.MinMaxScaler().fit_transform(embeddings[i])
+    
+    # Use standard normalisation
+    embeddings = (embeddings - np.mean(embeddings, axis=0)) / np.std(embeddings, axis=0)
 
     file_to_embedding = {}
     for i in range(len(filenames)):
@@ -122,7 +125,8 @@ def get_data(file, train=True):
     X = []
     y = []
     # use the individual embeddings to generate the features and labels for triplets
-    for t in triplets:
+    print(f"Create training set from {file}")
+    for t in tqdm(triplets):
         emb = [file_to_embedding[a] for a in t.split()]
         X.append(np.hstack([emb[0], emb[1], emb[2]]))
         y.append(1)
@@ -130,8 +134,10 @@ def get_data(file, train=True):
         if train:
             X.append(np.hstack([emb[0], emb[2], emb[1]]))
             y.append(0)
+
     X = np.vstack(X)
     y = np.hstack(y)
+    print("return")
     return X, y
 
 # Hint: adjust batch_size and num_workers to your PC configuration, so that you don't run out of memory
@@ -144,6 +150,7 @@ def create_loader_from_np(X, y = None, train = True, batch_size=64, shuffle=True
     
     output: loader: torch.data.util.DataLoader, the object containing the data
     """
+    print("Load data")
     if train:
         dataset = TensorDataset(torch.from_numpy(X).type(torch.float), 
                                 torch.from_numpy(y).type(torch.long))
@@ -169,7 +176,7 @@ class Net(nn.Module):
 
     def forward(self, x):
         """
-        The forward pass of the model.
+        The forward pass of the model.        
 
         input: x: torch.Tensor, the input to the model
 
@@ -192,14 +199,28 @@ def train_model(train_loader):
     model.train()
     model.to(device)
     n_epochs = 10
+
+    losses = []
     # TODO: define a loss function, optimizer and proceed with training. Hint: use the part 
     # of the training data as a validation split. After each epoch, compute the loss on the 
     # validation split and print it out. This enables you to see how your model is performing 
     # on the validation data before submitting the results on the server. After choosing the 
     # best model, train it on the whole training data.
-    for epoch in range(n_epochs):        
+
+    criterion = nn.CrossEntropyLoss()
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
+
+    print("Train model")
+    for epoch in tqdm(range(n_epochs)):        
         for [X, y] in train_loader:
-            pass
+            y_pred = model.forward(X)
+            loss = criterion(y_pred, y)
+            losses.append(loss)
+
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
     return model
 
 def test_model(model, loader):
@@ -234,13 +255,13 @@ if __name__ == '__main__':
     TEST_TRIPLETS = 'P3/test_triplets.txt'
 
     # generate embedding for each image in the dataset
-    if(os.path.exists('P3/dataset/embeddings.npy') == False):
+    if(os.path.exists('P3/dataset/embeddings_otto.npy') == False):
         generate_embeddings()
 
     # load the training and testing data
     X, y = get_data(TRAIN_TRIPLETS)
-    X_test, _ = get_data(TEST_TRIPLETS, train=False)
 
+    X_test, _ = get_data(TEST_TRIPLETS, train=False)
     # Create data loaders for the training and testing data
     train_loader = create_loader_from_np(X, y, train = True, batch_size=64)
     test_loader = create_loader_from_np(X_test, train = False, batch_size=2048, shuffle=False)
@@ -248,6 +269,6 @@ if __name__ == '__main__':
     # define a model and train it
     model = train_model(train_loader)
     
-    # test the model on the test data
-    test_model(model, test_loader)
-    print("Results saved to results.txt")
+    # # test the model on the test data
+    # test_model(model, test_loader)
+    # print("Results saved to results.txt")
