@@ -14,7 +14,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
 from sklearn import preprocessing as pre
-from torchvision.models import resnet50, ResNet50_Weights
+from torchvision.models import resnet50, ResNet50_Weights, efficientnet_b3
 ### Use progress bar
 from tqdm import tqdm
 
@@ -51,7 +51,11 @@ def generate_embeddings():
     # model = models.resnet18(pretrained=True)
 
     ### Use ResNet50
-    model = resnet50(weights="IMAGENET1K_V2")
+    # model = resnet50(weights="IMAGENET1K_V2")
+
+    ### Use EfficientNetB3
+    model = efficientnet_b3(weights='IMAGENET1K_V1')
+
 
     # Use the model in evaluation mode to get the calculated features
     model.eval()
@@ -59,7 +63,7 @@ def generate_embeddings():
       
 
     embeddings = []
-    embedding_size = list(model.children())[-1].in_features # Get in_features via debugger
+    embedding_size = (list(model.children())[-1][1]).in_features # Get in_features via debugger, for efficientnet_b3 we need list(model.children())[-1][1]
     num_images = len(train_dataset)
     embeddings = np.zeros((num_images, embedding_size))
 
@@ -68,7 +72,7 @@ def generate_embeddings():
 
     ### Define last layer or specific one
 
-    model = nn.Sequential(*list(model.children())[:-1])     # Takes resnet model and cuts the evaluation stage
+    model = nn.Sequential(*list(model.children())[:-1])     # Takes resnet or efficientnet model and cuts the evaluation stage
 
 
     with torch.no_grad():  
@@ -91,7 +95,7 @@ def generate_embeddings():
 
 
 
-    np.save('P3/dataset/embeddings_otto.npy', embeddings)
+    np.save('P3/dataset/embeddings_otto_efficientnetb0.npy', embeddings)
 
 
 def get_data(file, train=True):
@@ -113,7 +117,7 @@ def get_data(file, train=True):
     train_dataset = datasets.ImageFolder(root="P3/dataset/",
                                          transform=None)
     filenames = [s[0].split('/')[-1].replace('.jpg', '') for s in train_dataset.samples]
-    embeddings = np.load('P3/dataset/embeddings_otto.npy')
+    embeddings = np.load('P3/dataset/embeddings_otto_efficientnetb0.npy')
     # TODO: Normalize the embeddings across the dataset
     
     # Use standard normalisation
@@ -125,7 +129,7 @@ def get_data(file, train=True):
     X = []
     y = []
     # use the individual embeddings to generate the features and labels for triplets
-    print(f"Create training set from {file}")
+    print(f"Create set from {file}")
     for t in tqdm(triplets):
         emb = [file_to_embedding[a] for a in t.split()]
         X.append(np.hstack([emb[0], emb[1], emb[2]]))
@@ -138,14 +142,14 @@ def get_data(file, train=True):
     X = np.vstack(X)
     y = np.hstack(y)
 
-    if train:
-        np.save('P3/dataset/X.npy', X)
-        np.save('P3/dataset/y.npy', y)
-    else:
-        np.save('P3/dataset/X_test.npy', X)
+    # if train:
+    #     np.save('P3/dataset/X.npy', X)
+    #     np.save('P3/dataset/y.npy', y)
+    # else:
+    #     np.save('P3/dataset/X_test.npy', X)
     
     print("return")
-    # return X, y
+    return X, y
 
 # Hint: adjust batch_size and num_workers to your PC configuration, so that you don't run out of memory
 def create_loader_from_np(X, y = None, train = True, batch_size=64, shuffle=True, num_workers = 4):
@@ -180,7 +184,7 @@ class Net(nn.Module):
         The constructor of the model.
         """
         super().__init__()
-        self.fc = nn.Linear(6144, 2)
+        self.fc = nn.Linear(4608, 2)
 
     def forward(self, x):
         """
@@ -263,32 +267,35 @@ if __name__ == '__main__':
     TEST_TRIPLETS = 'P3/test_triplets.txt'
 
     # generate embedding for each image in the dataset
-    if(os.path.exists('P3/dataset/embeddings_otto.npy') == False):
+    if(os.path.exists('P3/dataset/embeddings_otto_efficientnetb0.npy') == False):
         generate_embeddings()
 
     # load the training
-    # X, y = get_data(TRAIN_TRIPLETS)
-    get_data(TRAIN_TRIPLETS)
+    X, y = get_data(TRAIN_TRIPLETS)
+    # get_data(TRAIN_TRIPLETS)
 
-    X = np.load('P3/dataset/X.npy')
-    y = np.load('P3/dataset/y.npy')
+    # X = np.load('P3/dataset/X.npy')
+    # y = np.load('P3/dataset/y.npy')
 
     train_loader = create_loader_from_np(X, y, train = True, batch_size=64)
 
 
-    # # define a model and train it
-    model = train_model(train_loader)
 
     # load testing data
-    # X_test, _ = get_data(TEST_TRIPLETS, train=False)
-    get_data(TEST_TRIPLETS, train=False)
+    X_test, _ = get_data(TEST_TRIPLETS, train=False)
+    # get_data(TEST_TRIPLETS, train=False)
 
-    X_test = np.load('P3/dataset/X_test.npy')
+    # X_test = np.load('P3/dataset/X_test.npy')
 
     test_loader = create_loader_from_np(X_test, train = False, batch_size=2048, shuffle=False)
+
+        
+    # # define a model and train it
+
    
-   
+    model = train_model(train_loader)
+
     
-    # # test the model on the test data
-    # test_model(model, test_loader)
-    # print("Results saved to results.txt")
+    # test the model on the test data
+    test_model(model, test_loader)
+    print("Results saved to results.txt")
