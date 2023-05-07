@@ -36,7 +36,7 @@ def generate_embeddings(path, batch_size, num_work):
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
 
-    # pretrained_weights = EfficientNet_B7_Weights.IMAGENET1K_V1
+    pretrained_weights = EfficientNet_B7_Weights.IMAGENET1K_V1
     # train_transforms = pretrained_weights.transforms()
 
     # The train dataset, loaded in batches.
@@ -58,10 +58,10 @@ def generate_embeddings(path, batch_size, num_work):
     # model = efficientnet_b3(weights='IMAGENET1K_V1')
 
     # Pretrained model efficientnet_b5
-    model = efficientnet_b5(weights='IMAGENET1K_V1')
+    # model = efficientnet_b5(weights='IMAGENET1K_V1')
 
     # Pretrained model efficientnet_b7
-    # model = efficientnet_b7(weights='IMAGENET1K_V1')  
+    model = efficientnet_b7(weights='IMAGENET1K_V1')  
 
     # Put model into evaluation mode to get the calculated values for each entry.
     model.eval()
@@ -207,9 +207,9 @@ class Net(nn.Module):
         # For EfficientNetB0 adjust to 1280x3 features per picture.
         # For EfficientNetB3 adjust to 1536x3 features per picture.
         # For EfficientNetB7 adjust to 2560x3 features per picture.
-        # For EfficientNetB8 2048x3
+        # For EfficientNetB5 2048x3
         
-        self.fc1 = nn.Linear(4608, 3072)
+        self.fc1 = nn.Linear(7680, 3072)
         self.fc2 = nn.Linear(3072, 2048)
         self.fc3 = nn.Linear(2048, 1024)
         self.fc4 = nn.Linear(1024, 512)
@@ -394,7 +394,7 @@ def train_model(model, train_loader, loss_function, optimizer, epochs, device, b
         train_loss = train_loss/len(train_loader)
         final_train_loss.append(train_loss)
         print('\n')
-        print(f'Final train {epoch} loss: {train_loss}')
+        print(f'Final train loss in epoch {epoch}: {train_loss}')
         print('\n')
 
 
@@ -459,7 +459,7 @@ if __name__ == '__main__':
     TEST_TRIPLETS = 'P3/test_triplets.txt'
 
     # Path to dataset
-    embedding_name = "otto_embeddings_efficientnetb3.npy"
+    embedding_name = "otto_embeddings_efficientnetb7.npy"
     Path = os.path
     dir = Path.join(Path.dirname(__file__))
     dir_path = Path.join(Path.dirname(__file__), "dataset")
@@ -471,10 +471,12 @@ if __name__ == '__main__':
 
     # Setup parameters
     batch_size = 100
-    num_work = 6
-    epochs = 15
+    num_work = 8
+    epochs = 20
     split = 0.1
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+    # optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+    optimizer = torch.optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
+
     loss_function = nn.BCELoss()  # nn.CrossEntropyLoss() only for 2 or more classes
     test = True
 
