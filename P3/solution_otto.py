@@ -377,7 +377,7 @@ def train_model(model, train_loader, loss_function, optimizer, epochs, device, b
     epochs_final = 5
 
     # Define training procedure for the final training
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+    # optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 
     final_train_loss = []
 
