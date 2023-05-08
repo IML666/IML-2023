@@ -209,10 +209,11 @@ class Net(nn.Module):
         # For EfficientNetB7 adjust to 2560x3 features per picture.
         # For EfficientNetB5 2048x3
         
-        self.fc1 = nn.Linear(6144, 3072)
+        self.fc1 = nn.Linear(4608, 3072)
         self.fc2 = nn.Linear(3072, 2048)
         self.fc3 = nn.Linear(2048, 1024)
         self.fc4 = nn.Linear(1024, 512)
+        # self.fc5 = nn.Linear(512, 256)
         self.dropout = nn.Dropout(0.6)
 
         self.output = nn.Linear(512, 1)
@@ -220,6 +221,7 @@ class Net(nn.Module):
         self.bn2 = nn.BatchNorm1d(2048)
         self.bn3 = nn.BatchNorm1d(1024)
         self.bn4 = nn.BatchNorm1d(512)
+        # self.bn5 = nn.BatchNorm1d(256)
 
 
         
@@ -254,6 +256,11 @@ class Net(nn.Module):
         x = self.bn4(x)
         x = self.function(x)
         x = self.dropout(x)
+
+        # x = self.fc5(x)
+        # x = self.bn5(x)
+        # x = self.function(x)
+        # x = self.dropout(x)
 
         x = self.output(x)
         x = F.sigmoid(x)
@@ -448,6 +455,7 @@ def test_model(model, loader):
 
 
 # Write initialization for weights
+# Initialization of the weights works but convergence is not achieved. TODO: find out why
 def init_weights(m):
     """
     Initializes the weights of the model.
@@ -477,7 +485,7 @@ if __name__ == '__main__':
     TEST_TRIPLETS = 'P3/test_triplets.txt'
 
     # Path to dataset
-    embedding_name = "otto_embeddings_efficientnetb5.npy"
+    embedding_name = "otto_embeddings_efficientnetb3.npy"
     Path = os.path
     dir = Path.join(Path.dirname(__file__))
     dir_path = Path.join(Path.dirname(__file__), "dataset")
@@ -494,8 +502,9 @@ if __name__ == '__main__':
     num_work = 8
     epochs = 20
     split = 0.1
+    learning_rate = 0.01
     # optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-    optimizer = torch.optim.SGD(model.parameters(), lr=0.001, momentum=0.9, weight_decay=0.001)
+    optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, momentum=0.5, weight_decay=0.001)
 
     loss_function = nn.BCELoss()  # nn.CrossEntropyLoss() only for 2 or more classes
     test = True
