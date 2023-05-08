@@ -209,7 +209,7 @@ class Net(nn.Module):
         # For EfficientNetB7 adjust to 2560x3 features per picture.
         # For EfficientNetB5 2048x3
         
-        self.fc1 = nn.Linear(7680, 3072)
+        self.fc1 = nn.Linear(6144, 3072)
         self.fc2 = nn.Linear(3072, 2048)
         self.fc3 = nn.Linear(2048, 1024)
         self.fc4 = nn.Linear(1024, 512)
@@ -220,6 +220,9 @@ class Net(nn.Module):
         self.bn2 = nn.BatchNorm1d(2048)
         self.bn3 = nn.BatchNorm1d(1024)
         self.bn4 = nn.BatchNorm1d(512)
+
+
+        
 
         
         self.function = function
@@ -444,6 +447,21 @@ def test_model(model, loader):
     np.savetxt("P3/results.txt", predictions, fmt='%i')
 
 
+# Write initialization for weights
+def init_weights(m):
+    """
+    Initializes the weights of the model.
+
+    input: m: torch.nn.Module, the model
+
+    output: None, the function initializes the weights of the model
+    """
+    if type(m) == nn.Linear:
+        # torch.nn.init.uniform_(m.weight, -0.01, 0.01)
+        # torch.nn.init.xavier_uniform(m.weight)
+        torch.nn.init.kaiming_uniform_(m.weight)
+        m.bias.data.fill_(0.01)
+
 # Main function. You don't have to change this
 if __name__ == '__main__':
 
@@ -459,7 +477,7 @@ if __name__ == '__main__':
     TEST_TRIPLETS = 'P3/test_triplets.txt'
 
     # Path to dataset
-    embedding_name = "otto_embeddings_efficientnetb7.npy"
+    embedding_name = "otto_embeddings_efficientnetb5.npy"
     Path = os.path
     dir = Path.join(Path.dirname(__file__))
     dir_path = Path.join(Path.dirname(__file__), "dataset")
@@ -467,6 +485,8 @@ if __name__ == '__main__':
 
     # Create model
     model = Net(F.relu)
+    # Apply weight initialization
+    # model.apply(init_weights)
     model.to(device)
 
     # Setup parameters
@@ -475,7 +495,7 @@ if __name__ == '__main__':
     epochs = 20
     split = 0.1
     # optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-    optimizer = torch.optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
+    optimizer = torch.optim.SGD(model.parameters(), lr=0.001, momentum=0.9, weight_decay=0.001)
 
     loss_function = nn.BCELoss()  # nn.CrossEntropyLoss() only for 2 or more classes
     test = True
