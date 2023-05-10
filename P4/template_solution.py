@@ -6,12 +6,15 @@ import numpy as np
 import torch
 import torch.nn as nn
 
+
+import os
+import sys
 from sklearn.model_selection import train_test_split
 from sklearn.base import BaseEstimator, TransformerMixin
 
 
 
-def load_data():
+def load_data(path_dict):
     """
     This function loads the data from the csv files and returns it as numpy arrays.
 
@@ -23,11 +26,11 @@ def load_data():
             y_train: np.ndarray, the labels of the training set
             x_test: np.ndarray, the features of the test set
     """
-    x_pretrain = pd.read_csv("public/pretrain_features.csv.zip", index_col="Id", compression='zip').drop("smiles", axis=1).to_numpy()
-    y_pretrain = pd.read_csv("public/pretrain_labels.csv.zip", index_col="Id", compression='zip').to_numpy().squeeze(-1)
-    x_train = pd.read_csv("public/train_features.csv.zip", index_col="Id", compression='zip').drop("smiles", axis=1).to_numpy()
-    y_train = pd.read_csv("public/train_labels.csv.zip", index_col="Id", compression='zip').to_numpy().squeeze(-1)
-    x_test = pd.read_csv("public/test_features.csv.zip", index_col="Id", compression='zip').drop("smiles", axis=1)
+    x_pretrain = pd.read_csv(path_dict["pretrain_features"], index_col="Id", compression='zip').drop("smiles", axis=1).to_numpy()
+    y_pretrain = pd.read_csv(path_dict["pretrain_labels"], index_col="Id", compression='zip').to_numpy().squeeze(-1)
+    x_train = pd.read_csv(path_dict["train_features"], index_col="Id", compression='zip').drop("smiles", axis=1).to_numpy()
+    y_train = pd.read_csv(path_dict["train_labels"], index_col="Id", compression='zip').to_numpy().squeeze(-1)
+    x_test = pd.read_csv(path_dict["test"], index_col="Id", compression='zip').drop("smiles", axis=1)
     return x_pretrain, y_pretrain, x_train, y_train, x_test
 
 class Net(nn.Module):
@@ -140,8 +143,29 @@ def get_regression_model():
 
 # Main function. You don't have to change this
 if __name__ == '__main__':
+
+    # Define file paths
+    pretrain_features = "pretrain_features.csv.zip"
+    pretrain_labels = "pretrain_labels.csv.zip"
+    train_features = "train_features.csv.zip"
+    train_labels = "train_labels.csv.zip"
+    test = "test_features.csv.zip"
+
+    # Create dictionary of file paths
+    Path = os.path
+    dir = Path.join(Path.dirname(__file__))
+    path_pretrain_features = Path.join(dir, pretrain_features)
+    path_train_features = Path.join(dir, train_features)
+    path_pretrain_labels = Path.join(dir, pretrain_labels)
+    path_train_labels = Path.join(dir, train_labels)
+    path_test = Path.join(dir, test)
+
+    path_dict = {"pretrain_features": path_pretrain_features, "pretrain_labels": path_pretrain_labels, 
+                 "train_features": path_train_features, "train_labels": path_train_labels, "test": path_test}
+
+
     # Load data
-    x_pretrain, y_pretrain, x_train, y_train, x_test = load_data()
+    x_pretrain, y_pretrain, x_train, y_train, x_test = load_data(path_dict)
     print("Data loaded!")
     # Utilize pretraining data by creating feature extractor which extracts lumo energy 
     # features from available initial features
@@ -157,5 +181,7 @@ if __name__ == '__main__':
 
     assert y_pred.shape == (x_test.shape[0],)
     y_pred = pd.DataFrame({"y": y_pred}, index=x_test.index)
-    y_pred.to_csv("results.csv", index_label="Id")
+
+    path_results = Path.join(dir, "results.csv")
+    y_pred.to_csv(path_results, index_label="Id")
     print("Predictions saved, all done!")
