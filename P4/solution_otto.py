@@ -149,24 +149,26 @@ class Autoencoder(nn.Module):
             self.fc1,
             # torch.nn.BatchNorm1d(500),
             self.activation(),
-            self.dropout,
+            # self.dropout,
 
             self.fc2,
             # torch.nn.BatchNorm1d(250),
             self.activation(),
-            self.dropout,
+            # self.dropout,
 
             self.fc3,
             # torch.nn.BatchNorm1d(64),
             self.activation(),
-            self.dropout,
+            # self.dropout,
 
             self.fc4,
             # torch.nn.BatchNorm1d(32),
             self.activation(),
-            self.dropout,
+            # self.dropout,
 
-            self.output
+            self.output,
+            self.activation(),
+            # self.dropout
         )
 
         self.decoder = torch.nn.Sequential(
@@ -174,31 +176,31 @@ class Autoencoder(nn.Module):
             torch.nn.Linear(feature_layer, nodes[4]),
             # torch.nn.BatchNorm1d(32),
             self.activation(),
-            self.dropout,
+            # self.dropout,
 
             torch.nn.Linear(nodes[4], nodes[3]),
             # torch.nn.BatchNorm1d(64),
             self.activation(),
-            self.dropout,
+            # self.dropout,
 
             torch.nn.Linear(nodes[3], nodes[2]),
             # torch.nn.BatchNorm1d(125),
             self.activation(),
-            self.dropout,
+            # self.dropout,
 
             torch.nn.Linear(nodes[2], nodes[1]),
             # torch.nn.BatchNorm1d(250),
             self.activation(),
-            self.dropout,
+            # self.dropout,
 
             torch.nn.Linear(nodes[1], nodes[0]), 
-            torch.nn.Sigmoid()
+            self.activation()
         )
 
         # Write prediction function
         self.prediction = torch.nn.Sequential(
-            torch.nn.Linear(feature_layer, 1),
-            torch.nn.Sigmoid()
+            torch.nn.Sigmoid(),
+            torch.nn.Linear(feature_layer, 1)
         )
 
 
@@ -220,7 +222,7 @@ class Autoencoder(nn.Module):
         decoded_array = self.decoder(encoded_array)
         return decoded_array
     
-def make_feature_extractor(x, y, n_epochs, AE, optimizer, loss_function, activation, model, batch_size=256, eval_size=1000):
+def make_feature_extractor(x, y, n_epochs, AE, optimizer, loss_function, activation, model, scheduler, batch_size=256, eval_size=1000):
     """
     This function trains the feature extractor on the pretraining data and returns a function which
     can be used to extract features from the training and test data.
@@ -249,48 +251,79 @@ def make_feature_extractor(x, y, n_epochs, AE, optimizer, loss_function, activat
 
     train_val_losses = []
 
-    for epoch in tqdm(range(epochs)):
+    model.train()
 
-        # Training the model
-        train_loss = 0
-        model.train()
-        print('\n')
-        print(f'Training the model in epoch {epoch}')
-        print('\n')
-        for X in tqdm(x_tr):
-            X = X.to(device)
-            reconstructed = model.forward(X)
-            
-            
+    for epoch in tqdm(range(n_epochs)):
+        # shuffle data
+        idx = np.arange(x_tr.shape[0])
+        np.random.shuffle(idx)
+        x_tr = x_tr[idx]
+        y_tr = y_tr[idx]
+
+        # training
+        for i in range(0, x_tr.shape[0], batch_size):
+            x_batch = x_tr[i:i+batch_size]
+            y_batch = y_tr[i:i+batch_size]
+
             optimizer.zero_grad()
-            loss = loss_function(reconstructed, X)
+            x_pred = model.forward(x_batch)
+            loss = loss_function(x_pred, x_batch)
             loss.backward()
+            train_loss = loss.item()
             optimizer.step()
 
-            train_loss += loss.detach()
-            
-            
-        train_loss = train_loss/len(x_tr)
+        scheduler.step()
 
-        # Validating the model
-        model.eval()
-        print('\n')
-        print(f'Validating the model in epoch {epoch}')
-        print('\n')
+        # validation for autoencoder
         with torch.no_grad():
-            val_loss = 0
-            for X_valid in tqdm(x_val):
-                X_valid = X_valid.to(device)
-                reconstructed = model.forward(X_valid)
-                
-                loss = loss_function(reconstructed, X_valid)
-                val_loss += loss
-            val_loss = val_loss/len(x_val)
+            x_pred = model.forward(x_val)
+            loss = loss_function(x_pred, x_val)
+            val_loss = loss.item()
+
+        print(
+            f"Epoch: {epoch}, Train loss: {train_loss}, Val loss: {val_loss}")
+
+    # for epoch in tqdm(range(epochs)):
+
         
-        print('\n')
-        print(f'Train {epoch} loss: {train_loss}, validation loss: {val_loss}')
-        print('\n')
-        train_val_losses.append((train_loss, val_loss))
+
+    #     # Training the model
+    #     train_loss = 0
+    #     for i in range(0, len(x_tr), batch_size):
+
+    #         X = x_tr[i:i+batch_size].to(device)
+    #         y = y_tr[i:i+batch_size].to(device)
+
+    #         optimizer.zero_grad()
+
+
+    #         reconstructed = model.forward(X)
+            
+            
+    #         loss = loss_function(reconstructed, X)
+    #         loss.backward()
+    #         train_loss += loss.detach()
+    #         optimizer.step()
+        
+    #     scheduler.step()
+              
+    #     train_loss = train_loss/len(x_tr)
+
+    #     # Validating the model
+    #     model.eval()
+    #     with torch.no_grad():
+    #         val_loss = 0
+    #         for X_valid in x_val:
+    #             X_valid = X_valid.to(device)
+    #             reconstructed_val = model.forward(X_valid)
+                
+    #             loss = loss_function(reconstructed_val, X_valid)
+    #             val_loss += loss.detach()
+
+    #         val_loss = val_loss/len(x_val)
+        
+    #     print(f'Train loss in {epoch}: {train_loss}, validation loss: {val_loss}')
+    #     train_val_losses.append((train_loss, val_loss))
 
         
 
@@ -314,7 +347,7 @@ def make_feature_extractor(x, y, n_epochs, AE, optimizer, loss_function, activat
 
         return x
 
-    return make_features(x), train_val_losses
+    return make_features, train_val_losses
 
 def make_pretraining_class(feature_extractors):
     """
@@ -393,7 +426,7 @@ if __name__ == '__main__':
     # features from available initial features
 
     # Set parameters for the feature extractor
-    n_epochs = 1
+    n_epochs = 20
 
     # Use autoencoder or NN to extract features from the pretraining data
     AE = True
@@ -409,11 +442,13 @@ if __name__ == '__main__':
     else:
         model = NN(in_features, activation)
     
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.1)
     
 
-    feature_extractor, train_val_losses =  make_feature_extractor(x_pretrain, y_pretrain, n_epochs, AE, optimizer, loss_function, activation, model)
+    feature_extractor, train_val_losses =  make_feature_extractor(x_pretrain, y_pretrain, n_epochs, AE, optimizer, loss_function, activation, model, scheduler)
     PretrainedFeatureClass = make_pretraining_class({"pretrain": feature_extractor})
+    PretrainedFeature = PretrainedFeatureClass(feature_extractor="pretrain") 
     
     # regression model
     regression_model = get_regression_model()
@@ -428,16 +463,18 @@ if __name__ == '__main__':
 
     # Create the pipeline
     pipeline = Pipeline([
-        ("pretrained_features", PretrainedFeatureClass(feature_extractor="pretrain")),
+        ("feature_extractor", PretrainedFeature),
         ("scaler", scaler),
-        ("regression", regression_model)
+        ("regression", regression_model),
     ])
 
     # Train the pipeline
     pipeline.fit(x_train, y_train)
 
     # Predict on the test set
-    y_pred = pipeline.predict(x_test)
+    # First convert to torch.Tensor
+    x_test_to_tensor = torch.tensor(x_test.values, dtype=torch.float)
+    y_pred = pipeline.predict(x_test_to_tensor)
 
     assert y_pred.shape == (x_test.shape[0],)
     y_pred = pd.DataFrame({"y": y_pred}, index=x_test.index)
