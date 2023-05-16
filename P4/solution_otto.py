@@ -15,6 +15,9 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import mean_squared_error
 from sklearn.linear_model import LinearRegression
+from sklearn.linear_model import SGDRegressor
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.svm import SVR
 from tqdm import tqdm
 
 
@@ -120,20 +123,15 @@ class Autoencoder(nn.Module):
         # TODO: Define the architecture of the model. It should be able to be trained on pretraing data 
         # and then used to extract features from the training and test data.
 
-        # Autoencoder setup
-        # first_layer_nodes = in_features*0.5
-        # second_layer_nodes = in_features*0.25
-        # third_layer_nodes = in_features*0.125
-        # fourth_layer_nodes = in_features*0.0625
-
 
         # Define number of nodes in extraction layer
         feature_layer = 64
+        prediction_layer = 32
 
-        nodes = [in_features, 800, 400, 200, 128]
+        nodes = [in_features, 1000, 500, 250, 128]
 
         self.activation = activation
-        self.dropout = nn.Dropout(0.5)
+        self.dropout = nn.Dropout(0.6)
 
         self.fc1 = nn.Linear(nodes[0], nodes[1])
         self.fc2 = nn.Linear(nodes[1], nodes[2])
@@ -149,26 +147,26 @@ class Autoencoder(nn.Module):
             self.fc1,
             # torch.nn.BatchNorm1d(500),
             self.activation(),
-            # self.dropout,
+            self.dropout,
 
             self.fc2,
             # torch.nn.BatchNorm1d(250),
             self.activation(),
-            # self.dropout,
+            self.dropout,
 
             self.fc3,
             # torch.nn.BatchNorm1d(64),
             self.activation(),
-            # self.dropout,
+            self.dropout,
 
             self.fc4,
             # torch.nn.BatchNorm1d(32),
             self.activation(),
-            # self.dropout,
+            self.dropout,
 
             self.output,
             self.activation(),
-            # self.dropout
+            self.dropout
         )
 
         self.decoder = torch.nn.Sequential(
@@ -176,22 +174,22 @@ class Autoencoder(nn.Module):
             torch.nn.Linear(feature_layer, nodes[4]),
             # torch.nn.BatchNorm1d(32),
             self.activation(),
-            # self.dropout,
+            self.dropout,
 
             torch.nn.Linear(nodes[4], nodes[3]),
             # torch.nn.BatchNorm1d(64),
             self.activation(),
-            # self.dropout,
+            self.dropout,
 
             torch.nn.Linear(nodes[3], nodes[2]),
             # torch.nn.BatchNorm1d(125),
             self.activation(),
-            # self.dropout,
+            self.dropout,
 
             torch.nn.Linear(nodes[2], nodes[1]),
             # torch.nn.BatchNorm1d(250),
             self.activation(),
-            # self.dropout,
+            self.dropout,
 
             torch.nn.Linear(nodes[1], nodes[0]), 
             self.activation()
@@ -199,14 +197,18 @@ class Autoencoder(nn.Module):
 
         # Write prediction function
         self.prediction = torch.nn.Sequential(
-            torch.nn.Sigmoid(),
-            torch.nn.Linear(feature_layer, 1)
+            torch.nn.Linear(feature_layer, prediction_layer),
+            self.activation(),
+            self.dropout,
+            torch.nn.Linear(prediction_layer, 1)
         )
 
+        
 
 
 
-    def forward(self, x):
+
+    def forward(self, x, prediction=False):
         """
         The forward pass of the model.
 
@@ -217,12 +219,21 @@ class Autoencoder(nn.Module):
         # TODO: Implement the forward pass of the model, in accordance with the architecture 
         # defined in the constructor.
 
-        # Autoencoder forward pass
-        encoded_array = self.encoder(x)
-        decoded_array = self.decoder(encoded_array)
-        return decoded_array
+        # Autoencoder forward pass with prediction
+
+        if prediction:
+            encoded_array = self.encoder(x)
+            prediction = self.prediction(encoded_array)
+            return prediction
+        else:
+            encoded_array = self.encoder(x)
+            decoded_array = self.decoder(encoded_array)
+            return decoded_array
+        
+
     
-def make_feature_extractor(x, y, n_epochs, AE, optimizer, loss_function, activation, model, scheduler, batch_size=256, eval_size=1000):
+    
+def make_feature_extractor(x, y, n_epochs, pred_epochs, optimizer, loss_function, model, scheduler, batch_size=256, eval_size=1000):
     """
     This function trains the feature extractor on the pretraining data and returns a function which
     can be used to extract features from the training and test data.
@@ -246,84 +257,96 @@ def make_feature_extractor(x, y, n_epochs, AE, optimizer, loss_function, activat
     # to monitor the loss.
 
     # Training loop
-    epochs = n_epochs
-
-
     train_val_losses = []
 
     model.train()
 
     for epoch in tqdm(range(n_epochs)):
-        # shuffle data
-        idx = np.arange(x_tr.shape[0])
-        np.random.shuffle(idx)
-        x_tr = x_tr[idx]
-        y_tr = y_tr[idx]
 
-        # training
-        for i in range(0, x_tr.shape[0], batch_size):
-            x_batch = x_tr[i:i+batch_size]
-            y_batch = y_tr[i:i+batch_size]
+        
+
+        # Training the model
+        train_loss = 0
+        for i in range(0, len(x_tr), batch_size):
+
+            X = x_tr[i:i+batch_size]
+            y = y_tr[i:i+batch_size]
 
             optimizer.zero_grad()
-            x_pred = model.forward(x_batch)
-            loss = loss_function(x_pred, x_batch)
+
+
+            reconstructed = model.forward(X)
+            
+            
+            loss = loss_function(reconstructed, X)
             loss.backward()
-            train_loss = loss.item()
+            train_loss += loss.detach()
             optimizer.step()
-
+        
         scheduler.step()
-
-        # validation for autoencoder
-        with torch.no_grad():
-            x_pred = model.forward(x_val)
-            loss = loss_function(x_pred, x_val)
-            val_loss = loss.item()
-
-        print(
-            f"Epoch: {epoch}, Train loss: {train_loss}, Val loss: {val_loss}")
-
-    # for epoch in tqdm(range(epochs)):
-
-        
-
-    #     # Training the model
-    #     train_loss = 0
-    #     for i in range(0, len(x_tr), batch_size):
-
-    #         X = x_tr[i:i+batch_size].to(device)
-    #         y = y_tr[i:i+batch_size].to(device)
-
-    #         optimizer.zero_grad()
-
-
-    #         reconstructed = model.forward(X)
-            
-            
-    #         loss = loss_function(reconstructed, X)
-    #         loss.backward()
-    #         train_loss += loss.detach()
-    #         optimizer.step()
-        
-    #     scheduler.step()
               
-    #     train_loss = train_loss/len(x_tr)
+        train_loss = train_loss/len(x_tr)
 
-    #     # Validating the model
-    #     model.eval()
-    #     with torch.no_grad():
-    #         val_loss = 0
-    #         for X_valid in x_val:
-    #             X_valid = X_valid.to(device)
-    #             reconstructed_val = model.forward(X_valid)
+        # Validating the model
+        with torch.no_grad():
+            val_loss = 0
+            for X_valid in x_val:
+                reconstructed_val = model.forward(X_valid)
                 
-    #             loss = loss_function(reconstructed_val, X_valid)
-    #             val_loss += loss.detach()
+                loss = loss_function(reconstructed_val, X_valid)
+                val_loss += loss.detach()
 
-    #         val_loss = val_loss/len(x_val)
+            val_loss = val_loss/len(x_val)
         
-    #     print(f'Train loss in {epoch}: {train_loss}, validation loss: {val_loss}')
-    #     train_val_losses.append((train_loss, val_loss))
+        print(f'Train loss in {epoch}: {train_loss}, validation loss: {val_loss}')
+        train_val_losses.append((train_loss, val_loss))
+
+    # Prediction loop
+
+    pred_val_losses = []
+
+    for epoch in tqdm(range(pred_epochs)):
+
+        
+
+        # Training the predictor
+        pred_loss = 0
+        for i in range(0, len(x_tr), batch_size):
+
+            X = x_tr[i:i+batch_size]
+            y = y_tr[i:i+batch_size]
+
+            optimizer.zero_grad()
+
+
+            y_pred = model.forward(X, prediction=True).flatten()
+            
+            
+            loss = loss_function(y_pred, y)
+            loss.backward()
+            pred_loss += loss.detach()
+            optimizer.step()
+        
+        scheduler.step()
+              
+        pred_loss = pred_loss/len(x_tr)
+
+        # Validating the model
+        with torch.no_grad():
+            val_loss = 0
+            for i in range(0, len(x_val), batch_size):
+
+                X = x_val[i:i+batch_size]
+                y = y_val[i:i+batch_size]
+                y_pred = model.forward(X, prediction=True).flatten()
+                
+                loss = loss_function(y_pred, y)
+                val_loss += loss.detach()
+
+            val_loss = val_loss/len(x_val)
+        
+        print(f'Prediction loss in {epoch}: {pred_loss}, validation loss: {val_loss}')
+        pred_val_losses.append((pred_loss, val_loss))
 
         
 
@@ -345,9 +368,9 @@ def make_feature_extractor(x, y, n_epochs, AE, optimizer, loss_function, activat
         features = model.encoder(x)
         features = features.detach().numpy()
 
-        return x
+        return features
 
-    return make_features, train_val_losses
+    return make_features, train_val_losses, pred_val_losses
 
 def make_pretraining_class(feature_extractors):
     """
@@ -392,8 +415,6 @@ def get_regression_model():
 # Main function. You don't have to change this
 if __name__ == '__main__':
 
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    print(f'Used device: {device}')
 
     # Define file paths
     pretrain_features = "pretrain_features.csv.zip"
@@ -419,34 +440,34 @@ if __name__ == '__main__':
     x_pretrain, y_pretrain, x_train, y_train, x_test = load_data(path_dict)
     print("Data loaded!")
 
-    print("pretrain_features shape: ", x_pretrain.shape)
-
-    print("train_features shape: ", x_train.shape)
     # Utilize pretraining data by creating feature extractor which extracts lumo energy 
     # features from available initial features
 
     # Set parameters for the feature extractor
     n_epochs = 20
+    pred_epochs = 20
 
-    # Use autoencoder or NN to extract features from the pretraining data
-    AE = True
-
+    
     # Set functions for the feature extractor
     loss_function = torch.nn.MSELoss()
     activation = torch.nn.ReLU
     in_features = x_pretrain.shape[1]
 
+    # Use autoencoder or NN to extract features from the pretraining data
+    AE = True
+
     # model declaration
+    # Choose the type of autoencoder and compare performance
     if AE:
         model = Autoencoder(in_features, activation)
     else:
         model = NN(in_features, activation)
     
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
-    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.1)
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=2, gamma=0.1)
     
 
-    feature_extractor, train_val_losses =  make_feature_extractor(x_pretrain, y_pretrain, n_epochs, AE, optimizer, loss_function, activation, model, scheduler)
+    feature_extractor, train_val_losses, pred_val_losses =  make_feature_extractor(x_pretrain, y_pretrain, n_epochs, pred_epochs, optimizer, loss_function, model, scheduler)
     PretrainedFeatureClass = make_pretraining_class({"pretrain": feature_extractor})
     PretrainedFeature = PretrainedFeatureClass(feature_extractor="pretrain") 
     
