@@ -212,7 +212,7 @@ class AE(nn.Module):
 
         return decoded
 
-def train_model(training_data, model, batch_size, device, optimizer, loss_function, y_train=None):
+def train_model(training_data, model, batch_size, device, optimizer, loss_function, scheduler=None, y_train=None):
 
     # Set model to training mode.
     model.train()
@@ -245,10 +245,13 @@ def train_model(training_data, model, batch_size, device, optimizer, loss_functi
 
         train_loss += true_loss
 
+    if scheduler is not None:
+        scheduler.step()
+
     # Compute the total training loss
     train_loss = train_loss / len(training_data)
 
-    return model, optimizer, train_loss
+    return model, optimizer, scheduler, train_loss
 
 def validate_model(validation_data, model, loss_function, batch_size, device, y_val=None):
 
@@ -289,8 +292,8 @@ def validate_model(validation_data, model, loss_function, batch_size, device, y_
 
 def make_feature_extractor(x, y,
                            device, num_epochs, num_epochs_final, use_all_data,
-                           pretrain_model, pretrain_optimizer, pretrain_loss_function,
-                           model=None, optimizer=None, loss_function=None,
+                           pretrain_model, pretrain_optimizer, pretrain_loss_function, pretrain_scheduler,
+                           model=None, optimizer=None, loss_function=None, scheduler=None,
                            batch_size=256, eval_size=1024, seperate_models=False):
     """
     This function trains the feature extractor on the pretraining data and returns a function which
@@ -326,12 +329,16 @@ def make_feature_extractor(x, y,
     train_losses = []
     losses_dict = {}
 
-    print(f'Running autoencoder training over {num_epochs} epochs, extracting the features.')
     if seperate_models:
+        print(f'Running training over {num_epochs} epochs, extracting the features.')
         for epoch in tqdm(range(num_epochs)):
             # Training the model
-            pretrain_model, pretrain_optimizer, training_loss = train_model(x_tr, pretrain_model, batch_size, device,
-                                                                   pretrain_optimizer, pretrain_loss_function)
+            pretrain_model, pretrain_optimizer, pretrain_scheduler, training_loss = train_model(x_tr, pretrain_model,
+                                                                                                batch_size,
+                                                                                                device,
+                                                                                                pretrain_optimizer,
+                                                                                                pretrain_loss_function,
+                                                                                                pretrain_scheduler)
 
             # Validating the model
             validation_loss = validate_model(x_val, pretrain_model, pretrain_loss_function, batch_size, device)
@@ -363,8 +370,12 @@ def make_feature_extractor(x, y,
                 # Final training loop.
                 for epoch in tqdm(range(num_epochs_final)):
                     # Training the model
-                    pretrain_model, pretrain_optimizer, training_loss = train_model(x, pretrain_model, batch_size, device,
-                                                                                    pretrain_optimizer, pretrain_loss_function)
+                    pretrain_model, pretrain_optimizer, pretrain_scheduler, training_loss = train_model(x, pretrain_model,
+                                                                                                        batch_size,
+                                                                                                        device,
+                                                                                                        pretrain_optimizer,
+                                                                                                        pretrain_loss_function,
+                                                                                                        pretrain_scheduler)
 
                     print(f"Train {epoch} loss: {training_loss}")
                     final_train_loss.append(training_loss)
@@ -396,12 +407,13 @@ def make_feature_extractor(x, y,
         model = pretrain_model
         optimizer = pretrain_optimizer
         loss_function = pretrain_loss_function
+        scheduler = pretrain_scheduler
 
     # Start the loop of the second part of the network.
     print(f'Running the prediction analysis over {num_epochs} epochs using the labels as well.')
     for epoch in tqdm(range(num_epochs)):
-        model, optimizer, training_loss = train_model(pretrain_data, model, batch_size, device, optimizer,
-                                                      loss_function, y_tr)
+        model, optimizer, scheduler, training_loss = train_model(pretrain_data, model, batch_size, device, optimizer,
+                                                      loss_function, scheduler, y_tr)
 
         validation_loss = validate_model(pretrain_val_data, model, loss_function, batch_size, device, y_val)
 
@@ -430,7 +442,8 @@ def make_feature_extractor(x, y,
         # Final training loop.
         for epoch in tqdm(range(num_epochs_final)):
             # Training the model
-            model, optimizer, training_loss = train_model(x, model, batch_size, device, optimizer, loss_function, y)
+            model, optimizer, scheduler, training_loss = train_model(x, model, batch_size, device, optimizer,
+                                                                     loss_function, scheduler, y)
 
             print(f"Train {epoch} loss: {training_loss}")
             final_train_loss.append(training_loss)
@@ -583,6 +596,10 @@ if __name__ == '__main__':
     num_work = 12
     learning_rate = 0.01
     pretrain_learning_rate = 0.01
+    # Scheduler
+    use_scheduler = False
+    step_size = 2
+    gamma = 0.1
 
     # Only for SGD
     momentum = 0.05
@@ -637,18 +654,29 @@ if __name__ == '__main__':
     pretrain_optimizer = torch.optim.Adam(pretrain_model.parameters(), lr=pretrain_learning_rate)
     pretrain_loss_function = nn.MSELoss()
 
+    if use_scheduler:
+        pretrain_scheduler = torch.optim.lr_scheduler.StepLR(pretrain_optimizer, step_size=step_size, gamma=gamma)
+    else:
+        pretrain_scheduler = None
+
     if model is not None:
         optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
         loss_function = nn.MSELoss()
 
+        if use_scheduler:
+            scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=step_size, gamma=gamma)
+        else:
+            scheduler = None
+
     else:
-        optimizer, loss_function = None, None
+        optimizer, loss_function, scheduler = None, None, None
 
     feature_extractor, losses_dict, trained_model, pretrain_model = make_feature_extractor(x_pretrain, y_pretrain,
                                                             device,
                                                             num_epochs, num_final_epochs, use_all_data,
                                                             pretrain_model, pretrain_optimizer, pretrain_loss_function,
-                                                            model, optimizer, loss_function,
+                                                            pretrain_scheduler,
+                                                            model, optimizer, loss_function, scheduler,
                                                             batch_size, eval_size,
                                                             seperate_models)
 
