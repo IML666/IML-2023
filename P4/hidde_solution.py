@@ -583,8 +583,11 @@ if __name__ == '__main__':
     num_work = 12
     learning_rate = 0.01
     pretrain_learning_rate = 0.01
+
+    # Only for SGD
     momentum = 0.05
     weight_decay = 0.001
+
     use_all_data = True
 
     # Use autoencoder or NN to extract features from the pretraining data.
